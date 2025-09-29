@@ -1,0 +1,259 @@
+"use server";
+
+import { currentUser } from "@clerk/nextjs/server";
+import { checkRole } from "@/actions/auth.action";
+import prisma from "@/lib/prisma";
+import { revalidatePath } from "next/cache";
+
+async function getDbUser() {
+  const user = await currentUser();
+  if (!user) {
+    throw new Error("Not authenticated");
+  }
+
+  const dbUser = await prisma.user.findUnique({
+    where: { clerkId: user.id },
+    select: { id: true }
+  });
+
+  if (!dbUser) {
+    throw new Error("User not found");
+  }
+
+  return dbUser;
+}
+
+async function checkAdmin() {
+  const isAdmin = await checkRole(["ADMIN"]);
+  if (!isAdmin) {
+    throw new Error("Not authorized");
+  }
+}
+
+export async function updateGeneralSettings(formData: FormData) {
+  try {
+    await checkAdmin();
+    const dbUser = await getDbUser();
+
+    const updates = [
+      {
+        key: "site-name",
+        value: formData.get("site-name")?.toString() || "",
+        category: "general"
+      },
+      {
+        key: "site-description",
+        value: formData.get("site-description")?.toString() || "",
+        category: "general"
+      },
+      {
+        key: "contact-email",
+        value: formData.get("contact-email")?.toString() || "",
+        category: "general"
+      }
+    ];
+
+    for (const setting of updates) {
+      if (!setting.value.trim()) {
+        try {
+          await prisma.SiteSetting.delete({
+            where: { key: setting.key }
+          });
+        } catch (e) {
+          // Ignore if setting doesn't exist
+        }
+        continue;
+      }
+
+      await prisma.SiteSetting.upsert({
+        where: { key: setting.key },
+        update: {
+          value: setting.value,
+          updatedBy: dbUser.id
+        },
+        create: {
+          key: setting.key,
+          value: setting.value,
+          category: setting.category,
+          updatedBy: dbUser.id
+        }
+      });
+    }
+
+    revalidatePath("/admin/settings");
+  } catch (error) {
+    console.error("Error updating general settings:", error);
+    throw error;
+  }
+}
+
+export async function updateSecuritySettings(formData: FormData) {
+  try {
+    await checkAdmin();
+    const dbUser = await getDbUser();
+
+    const updates = [
+      {
+        key: "allow-signups",
+        value: formData.get("allow-signups")?.toString() || "",
+        category: "security"
+      },
+      {
+        key: "auto-suspend",
+        value: formData.get("auto-suspend")?.toString() || "",
+        category: "security"
+      },
+      {
+        key: "max-login-attempts",
+        value: formData.get("max-login-attempts")?.toString() || "",
+        category: "security"
+      }
+    ];
+
+    for (const setting of updates) {
+      if (!setting.value.trim()) {
+        try {
+          await prisma.SiteSetting.delete({
+            where: { key: setting.key }
+          });
+        } catch (e) {
+          // Ignore if setting doesn't exist
+        }
+        continue;
+      }
+
+      await prisma.SiteSetting.upsert({
+        where: { key: setting.key },
+        update: {
+          value: setting.value,
+          updatedBy: dbUser.id
+        },
+        create: {
+          key: setting.key,
+          value: setting.value,
+          category: setting.category,
+          updatedBy: dbUser.id
+        }
+      });
+    }
+
+    revalidatePath("/admin/settings");
+  } catch (error) {
+    console.error("Error updating security settings:", error);
+    throw error;
+  }
+}
+
+export async function updateModerationSettings(formData: FormData) {
+  try {
+    await checkAdmin();
+    const dbUser = await getDbUser();
+
+    const updates = [
+      {
+        key: "blocked-words",
+        value: formData.get("blocked-words")?.toString() || "",
+        category: "moderation"
+      },
+      {
+        key: "require-approval",
+        value: formData.get("require-approval")?.toString() || "",
+        category: "moderation"
+      },
+      {
+        key: "report-threshold",
+        value: formData.get("report-threshold")?.toString() || "",
+        category: "moderation"
+      }
+    ];
+
+    for (const setting of updates) {
+      if (!setting.value.trim()) {
+        try {
+          await prisma.SiteSetting.delete({
+            where: { key: setting.key }
+          });
+        } catch (e) {
+          // Ignore if setting doesn't exist
+        }
+        continue;
+      }
+
+      await prisma.SiteSetting.upsert({
+        where: { key: setting.key },
+        update: {
+          value: setting.value,
+          updatedBy: dbUser.id
+        },
+        create: {
+          key: setting.key,
+          value: setting.value,
+          category: setting.category,
+          updatedBy: dbUser.id
+        }
+      });
+    }
+
+    revalidatePath("/admin/settings");
+  } catch (error) {
+    console.error("Error updating moderation settings:", error);
+    throw error;
+  }
+}
+
+export async function updateApiSettings(formData: FormData) {
+  try {
+    await checkAdmin();
+    const dbUser = await getDbUser();
+
+    const updates = [
+      {
+        key: "api-key",
+        value: formData.get("api-key")?.toString() || "",
+        category: "api"
+      },
+      {
+        key: "api-rate-limit",
+        value: formData.get("api-rate-limit")?.toString() || "",
+        category: "api"
+      },
+      {
+        key: "api-whitelist",
+        value: formData.get("api-whitelist")?.toString() || "",
+        category: "api"
+      }
+    ];
+
+    for (const setting of updates) {
+      if (!setting.value.trim()) {
+        try {
+          await prisma.SiteSetting.delete({
+            where: { key: setting.key }
+          });
+        } catch (e) {
+          // Ignore if setting doesn't exist
+        }
+        continue;
+      }
+
+      await prisma.SiteSetting.upsert({
+        where: { key: setting.key },
+        update: {
+          value: setting.value,
+          updatedBy: dbUser.id
+        },
+        create: {
+          key: setting.key,
+          value: setting.value,
+          category: setting.category,
+          updatedBy: dbUser.id
+        }
+      });
+    }
+
+    revalidatePath("/admin/settings");
+  } catch (error) {
+    console.error("Error updating API settings:", error);
+    throw error;
+  }
+}

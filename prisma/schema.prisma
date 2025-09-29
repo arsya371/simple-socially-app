@@ -1,0 +1,223 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  USER
+  ADMIN
+  MODERATOR
+}
+
+enum NotificationType {
+  LIKE     
+  COMMENT 
+  FOLLOW
+  REPORT   
+}
+
+enum ReportStatus {
+  PENDING
+  REVIEWED
+  RESOLVED
+  DISMISSED
+}
+
+enum ReportType {
+  POST
+  COMMENT
+  PROFILE
+}
+
+enum ReportReason {
+  HARASSMENT
+  HATE_SPEECH
+  VIOLENCE
+  NUDITY
+  SPAM
+  FAKE_ACCOUNT
+  INAPPROPRIATE_CONTENT
+  IMPERSONATION
+  SELF_HARM
+  MISINFORMATION
+  OTHER
+}
+
+model User {
+  id String @id @default(cuid())
+  email String @unique
+  username String @unique
+  clerkId String @unique
+  name String?
+  bio String?
+  image String?
+  location String?
+  website String?
+  role Role @default(USER)
+  isActive Boolean @default(true)
+  suspendedUntil DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Content
+  posts Post[]
+  comments Comment[]
+  likes Like[]
+  followers Follows[] @relation("following")
+  following Follows[] @relation("follower")
+  
+  // Reports
+  reportsSubmitted Report[] @relation("reportedBy")
+  reportsReviewed Report[] @relation("reviewedReports")
+  reportedReports Report[] @relation("reportedUsers")
+  
+  // Settings & Notifications
+  siteSettingsEdited SiteSetting[]
+  notifications Notification[] @relation("userNotifications")
+  notificationsCreated Notification[] @relation("notificationCreator")
+  adminActions AdminAuditLog[] @relation("adminActions")
+}
+
+model Post {
+  id String @id @default(cuid())
+  authorId String
+  content String?
+  image String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  author User @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  comments Comment[]
+  likes Like[]
+  notifications Notification[]
+  reports Report[] @relation("reportedPosts")
+}
+
+model Comment {
+  id String @id @default(cuid())
+  content String
+  authorId String
+  postId String
+  createdAt DateTime @default(now())
+
+  // Relations
+  author User @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+  notifications Notification[]
+  reports Report[] @relation("reportedComments")
+
+  @@index([authorId, postId])
+}
+
+model Like {
+  id String @id @default(cuid())
+  postId String
+  userId String
+  createdAt DateTime @default(now())
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@index([userId, postId])
+  @@unique([userId, postId])
+}
+
+model Follows {
+  followerId String
+  followingId String
+  createdAt DateTime @default(now())
+
+  follower User @relation("follower", fields: [followerId], references: [id], onDelete: Cascade)
+  following User @relation("following", fields: [followingId], references: [id], onDelete: Cascade)
+
+  @@id([followerId, followingId])
+  @@index([followerId, followingId])
+}
+
+model Report {
+  id String @id @default(cuid())
+  type ReportType
+  reason ReportReason
+  details String?
+  status ReportStatus @default(PENDING)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  adminNote String? // For admin comments on the report
+  actionTaken String? // To record what action was taken
+
+  // Content being reported
+  postId String?
+  post Post? @relation("reportedPosts", fields: [postId], references: [id], onDelete: SetNull)
+  commentId String?
+  comment Comment? @relation("reportedComments", fields: [commentId], references: [id], onDelete: SetNull)
+  reportedUserId String?
+  reportedUser User? @relation("reportedUsers", fields: [reportedUserId], references: [id], onDelete: SetNull)
+
+  // Report management
+  reportedBy String
+  reporter User @relation("reportedBy", fields: [reportedBy], references: [id], onDelete: Cascade)
+  reviewedBy String?
+  reviewer User? @relation("reviewedReports", fields: [reviewedBy], references: [id])
+
+  @@index([type, status, reason])
+  @@index([postId])
+  @@index([commentId])
+  @@index([reportedUserId])
+  @@index([createdAt])
+}
+
+model SiteSetting {
+  id String @id @default(cuid())
+  key String @unique
+  value String
+  category String
+  updatedAt DateTime @updatedAt
+  updatedBy String
+
+  // Relations
+  editor User @relation(fields: [updatedBy], references: [id], onDelete: Cascade)
+
+  @@index([category, key])
+}
+
+model AdminAuditLog {
+  id String @id @default(cuid())
+  action String
+  details String?
+  performedById String
+  performedOn String?
+  createdAt DateTime @default(now())
+
+  // Relations
+  performedBy User @relation("adminActions", fields: [performedById], references: [id])
+
+  @@index([performedById])
+}
+
+model Notification {
+  id String @id @default(cuid())
+  userId String
+  creatorId String
+  type NotificationType
+  read Boolean @default(false)
+  postId String?
+  commentId String?
+  createdAt DateTime @default(now())
+
+  // Relations
+  user User @relation("userNotifications", fields: [userId], references: [id], onDelete: Cascade)
+  creator User @relation("notificationCreator", fields: [creatorId], references: [id], onDelete: Cascade)
+  post Post? @relation(fields: [postId], references: [id], onDelete: Cascade)
+  comment Comment? @relation(fields: [commentId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+}
