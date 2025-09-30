@@ -1,7 +1,7 @@
 import { getAuth } from "@clerk/nextjs/server";
 import { NextResponse, NextRequest } from "next/server";
 import prisma from "@/lib/prisma";
-import { ReportType } from "@prisma/client";
+// import { ReportType } from "@prisma/client";
 
 export async function POST(req: NextRequest) {
   try {
@@ -27,7 +27,7 @@ export async function POST(req: NextRequest) {
       return new NextResponse("Missing required fields", { status: 400 });
     }
 
-    if (!Object.values(ReportType).includes(type)) {
+    if (!["POST", "COMMENT", "PROFILE"].includes(type)) {
       return new NextResponse("Invalid report type", { status: 400 });
     }
 

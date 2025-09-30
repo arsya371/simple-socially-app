@@ -23,37 +23,69 @@ function PostCard({ post, dbUserId }: { post: Post; dbUserId: string | null }) {
   const [isCommenting, setIsCommenting] = useState(false);
   const [isLiking, setIsLiking] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [hasLiked, setHasLiked] = useState(post.likes.some((like) => like.userId === dbUserId));
-  const [optimisticLikes, setOptmisticLikes] = useState(post._count.likes);
+  const [hasLiked, setHasLiked] = useState(post.likes.some((like: any) => like.userId === dbUserId));
+  const [optimisticLikes, setOptimisticLikes] = useState(post._count.likes);
   const [showComments, setShowComments] = useState(false);
+  const [optimisticComments, setOptimisticComments] = useState(post.comments);
 
   const handleLike = async () => {
     if (isLiking) return;
+    
+    const previousLiked = hasLiked;
+    const previousLikes = optimisticLikes;
+    
     try {
       setIsLiking(true);
-      setHasLiked((prev) => !prev);
-      setOptmisticLikes((prev) => prev + (hasLiked ? -1 : 1));
+      setHasLiked(!previousLiked);
+      setOptimisticLikes((prev: any) => prev + (!previousLiked ? 1 : -1));
       await toggleLike(post.id);
     } catch (error) {
-      setOptmisticLikes(post._count.likes);
-      setHasLiked(post.likes.some((like) => like.userId === dbUserId));
+      setOptimisticLikes(previousLikes);
+      setHasLiked(previousLiked);
+      toast.error("Failed to like post");
     } finally {
       setIsLiking(false);
     }
   };
 
   const handleAddComment = async () => {
-    if (!newComment.trim() || isCommenting) return;
+    if (!newComment.trim() || isCommenting || !user) return;
     
+    const optimisticComment = {
+      id: 'temp-' + Date.now(),
+      content: newComment,
+      createdAt: new Date(),
+      authorId: dbUserId!,
+      postId: post.id,
+      author: {
+        id: dbUserId!,
+        name: user.fullName || user.username || 'User',
+        username: user.username || user.emailAddresses?.[0]?.emailAddress.split('@')[0] || 'user', // Ensure username is always a string    
+        image: user.imageUrl,
+      },
+    };
+
     try {
       setIsCommenting(true);
+      setOptimisticComments((prev: any) => [optimisticComment, ...prev]);
       const result = await createComment(post.id, newComment);
-      setNewComment("");
+
       if (result?.success) {
-        toast.success("Comment posted successfully");
+        setNewComment("");
+        if (result.comment) {
+          setOptimisticComments((prev: any) =>
+            prev.map((c: any) => (c.id === optimisticComment.id ? result.comment : c))
+          );
+        } else {
+          setOptimisticComments((prev: any) => prev.filter((c: any) => c.id !== optimisticComment.id));
+        }
+      } else if (result) {
+        setOptimisticComments((prev: any) => prev.filter((c: any) => c.id !== optimisticComment.id));
+        throw new Error(result?.error || "Failed to post comment");
       }
-    } catch (error) {
-      toast.error("Failed to post comment");
+    } catch (error: any) {
+      toast.error(error.message || "Failed to post comment");
+      setOptimisticComments((prev: any) => prev.filter((c: any) => c.id !== optimisticComment.id));
     } finally {
       setIsCommenting(false);
     }
@@ -74,30 +106,30 @@ function PostCard({ post, dbUserId }: { post: Post; dbUserId: string | null }) {
   };
 
   return (
-    <Card className="overflow-hidden">
+    <Card className="overflow-hidden hover:bg-muted/50 transition-colors">
       <CardContent className="p-4 sm:p-6">
         <div className="space-y-4">
-          <div className="flex space-x-3 sm:space-x-4">
-            <Link href={`/profile/${post.author.username}`}>
-              <Avatar className="size-8 sm:w-10 sm:h-10">
-                <AvatarImage src={post.author.image ?? "/avatar.png"} />
+          <div className="flex items-start space-x-4">
+            <Link href={`/profile/${post.author.username}`} className="shrink-0">
+              <Avatar className="h-10 w-10 border bg-muted">
+                <AvatarImage src={post.author.image ?? "/avatar.png"} alt={post.author.name ?? "User"} />
               </Avatar>
             </Link>
 
             {/* POST HEADER & TEXT CONTENT */}
-            <div className="flex-1 min-w-0">
+            <div className="flex-1 min-w-0 space-y-1">
               <div className="flex items-start justify-between">
-                <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-2 truncate">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:gap-2">
                   <Link
                     href={`/profile/${post.author.username}`}
-                    className="font-semibold truncate"
+                    className="font-semibold hover:underline truncate"
                   >
-                    {post.author.name}
+                    {post.author.name ?? "User"}
                   </Link>
-                  <div className="flex items-center space-x-2 text-sm text-muted-foreground">
-                    <Link href={`/profile/${post.author.username}`}>@{post.author.username}</Link>
-                    <span>•</span>
-                    <span>{formatDistanceToNow(new Date(post.createdAt))} ago</span>
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Link href={`/profile/${post.author.username}`} className="hover:underline">@{post.author.username}</Link>
+                    <span className="text-xs">•</span>
+                    <span className="text-xs">{formatDistanceToNow(new Date(post.createdAt))} ago</span>
                   </div>
                 </div>
                 {/* Action buttons for post author or report */}
@@ -115,28 +147,33 @@ function PostCard({ post, dbUserId }: { post: Post; dbUserId: string | null }) {
 
           {/* POST IMAGE */}
           {post.image && (
-            <div className="rounded-lg overflow-hidden">
-              <img src={post.image} alt="Post content" className="w-full h-auto object-cover" />
+            <div className="relative aspect-video rounded-lg overflow-hidden bg-muted">
+              <img 
+                src={post.image} 
+                alt="Post content" 
+                className="absolute inset-0 h-full w-full object-cover transition-opacity hover:opacity-95" 
+              />
             </div>
           )}
 
           {/* LIKE & COMMENT BUTTONS */}
-          <div className="flex items-center pt-2 space-x-4">
+          <div className="flex items-center pt-3 space-x-4 border-t">
             {user ? (
               <Button
                 variant="ghost"
                 size="sm"
-                className={`text-muted-foreground gap-2 ${
-                  hasLiked ? "text-red-500 hover:text-red-600" : "hover:text-red-500"
+                className={`h-9 px-4 text-muted-foreground gap-2 ${
+                  hasLiked ? "text-red-500 hover:text-red-600 dark:text-red-400 dark:hover:text-red-300" : "hover:text-red-500 dark:hover:text-red-400"
                 }`}
                 onClick={handleLike}
+                disabled={isLiking}
               >
                 {hasLiked ? (
-                  <HeartIcon className="size-5 fill-current" />
+                  <HeartIcon className="h-4 w-4 fill-current" />
                 ) : (
-                  <HeartIcon className="size-5" />
+                  <HeartIcon className="h-4 w-4" />
                 )}
-                <span>{optimisticLikes}</span>
+                <span className="text-sm font-medium">{optimisticLikes}</span>
               </Button>
             ) : (
               <SignInButton mode="modal">
@@ -150,68 +187,80 @@ function PostCard({ post, dbUserId }: { post: Post; dbUserId: string | null }) {
             <Button
               variant="ghost"
               size="sm"
-              className="text-muted-foreground gap-2 hover:text-blue-500"
+              className={`h-9 px-4 text-muted-foreground gap-2 ${showComments ? "text-blue-500 dark:text-blue-400" : "hover:text-blue-500 dark:hover:text-blue-400"}`}
               onClick={() => setShowComments((prev) => !prev)}
             >
               <MessageCircleIcon
-                className={`size-5 ${showComments ? "fill-blue-500 text-blue-500" : ""}`}
+                className={`h-4 w-4 ${showComments ? "fill-current" : ""}`}
               />
-              <span>{post.comments.length}</span>
+              <span className="text-sm font-medium">{optimisticComments.length}</span>
             </Button>
           </div>
 
           {/* COMMENTS SECTION */}
           {showComments && (
-            <div className="space-y-4 pt-4 border-t">
+            <div className="space-y-4 pt-4">
               <div className="space-y-4">
                 {/* DISPLAY COMMENTS */}
-                {post.comments.map((comment) => (
-                  <div key={comment.id} className="flex space-x-3">
-                    <Avatar className="size-8 flex-shrink-0">
-                      <AvatarImage src={comment.author.image ?? "/avatar.png"} />
-                    </Avatar>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                        <span className="font-medium text-sm">{comment.author.name}</span>
-                        <span className="text-sm text-muted-foreground">
-                          @{comment.author.username}
-                        </span>
-                        <span className="text-sm text-muted-foreground">·</span>
-                        <span className="text-sm text-muted-foreground">
-                          {formatDistanceToNow(new Date(comment.createdAt))} ago
-                        </span>
+                {optimisticComments.map((comment: any) => {
+                  const isOptimistic = comment.id.toString().startsWith('temp-');
+                  return (
+                    <div 
+                      key={comment.id} 
+                      className={`group flex space-x-3 hover:bg-muted/50 -mx-6 px-6 py-2 transition-colors ${
+                        isOptimistic ? 'opacity-70' : ''
+                      }`} 
+                    >
+                      <Link href={`/profile/${comment.author.username}`} className="shrink-0">
+                        <Avatar className="h-8 w-8 border bg-muted">
+                          <AvatarImage src={comment.author.image ?? "/avatar.png"} alt={comment.author.name ?? "User"} />
+                        </Avatar>
+                      </Link>
+                      <div className="flex-1 min-w-0 space-y-1">
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                          <Link href={`/profile/${comment.author.username}`} className="font-medium text-sm hover:underline">
+                            {comment.author.name ?? "User"}
+                          </Link>
+                          <Link href={`/profile/${comment.author.username}`} className="text-xs text-muted-foreground hover:underline">
+                            @{comment.author.username}
+                          </Link>
+                          <span className="text-xs text-muted-foreground">·</span>
+                          <span className="text-xs text-muted-foreground">
+                            {isOptimistic ? 'Just now' : formatDistanceToNow(new Date(comment.createdAt)) + ' ago'}
+                          </span>
+                        </div>
+                        <p className="text-sm break-words leading-normal">{comment.content}</p>
                       </div>
-                      <p className="text-sm break-words">{comment.content}</p>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
 
               {user ? (
-                <div className="flex space-x-3">
-                  <Avatar className="size-8 flex-shrink-0">
-                    <AvatarImage src={user?.imageUrl || "/avatar.png"} />
+                <div className="flex items-start space-x-3 pt-2">
+                  <Avatar className="h-8 w-8 border bg-muted">
+                    <AvatarImage src={user?.imageUrl || "/avatar.png"} alt={user?.username || "User avatar"} />
                   </Avatar>
-                  <div className="flex-1">
+                  <div className="flex-1 space-y-2">
                     <Textarea
                       placeholder="Write a comment..."
                       value={newComment}
                       onChange={(e) => setNewComment(e.target.value)}
-                      className="min-h-[80px] resize-none"
+                      className="min-h-[80px] resize-none text-sm leading-relaxed"
                     />
-                    <div className="flex justify-end mt-2">
+                    <div className="flex justify-end">
                       <Button
                         size="sm"
                         onClick={handleAddComment}
-                        className="flex items-center gap-2"
+                        className="h-9 px-4 gap-2"
                         disabled={!newComment.trim() || isCommenting}
                       >
                         {isCommenting ? (
                           "Posting..."
                         ) : (
                           <>
-                            <SendIcon className="size-4" />
-                            Comment
+                            <SendIcon className="h-4 w-4" />
+                            <span>Comment</span>
                           </>
                         )}
                       </Button>
@@ -219,11 +268,11 @@ function PostCard({ post, dbUserId }: { post: Post; dbUserId: string | null }) {
                   </div>
                 </div>
               ) : (
-                <div className="flex justify-center p-4 border rounded-lg bg-muted/50">
+                <div className="flex justify-center py-6">
                   <SignInButton mode="modal">
-                    <Button variant="outline" className="gap-2">
-                      <LogInIcon className="size-4" />
-                      Sign in to comment
+                    <Button variant="outline" size="sm" className="h-9 px-4 gap-2">
+                      <LogInIcon className="h-4 w-4" />
+                      <span>Sign in to comment</span>
                     </Button>
                   </SignInButton>
                 </div>

@@ -1,10 +1,37 @@
-import { getAuth } from "@clerk/nextjs/server";
-import { NextRequest } from "next/server";
+import { getAuth, auth } from "@clerk/nextjs/server";
+import type { NextRequest } from "next/server";
 import prisma from "./prisma";
+import { redirect } from "next/navigation";
+
+export async function requireAdmin() {
+  const { userId } = await auth();
+  if (!userId) {
+    redirect('/sign-in');
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { clerkId: userId },
+    select: { role: true }
+  });
+
+  if (user?.role !== 'ADMIN') {
+    redirect('/');
+  }
+}
 
 export async function getCurrentUser(req?: NextRequest | null) {
   try {
-    const { userId } = getAuth(req as NextRequest);
+    // Use server-side auth() for server actions when no request is provided
+    let userId: string | null;
+
+    if (req) {
+      // For middleware/edge functions
+      userId = getAuth(req).userId;
+    } else {
+      // For server actions
+      const authData = await auth();
+      userId = authData.userId;
+    }
 
     if (!userId) {
       return null;
@@ -18,7 +45,8 @@ export async function getCurrentUser(req?: NextRequest | null) {
         email: true,
         role: true,
         isActive: true,
-        suspendedUntil: true,
+        banned: true,
+        bannedUntil: true,
         bio: true,
         image: true,
         name: true
@@ -29,20 +57,21 @@ export async function getCurrentUser(req?: NextRequest | null) {
       return null;
     }
 
-    if (!user.isActive && user.suspendedUntil) {
+    if (user.banned && user.bannedUntil) {
       const now = new Date();
-      if (user.suspendedUntil > now) {
+      if (user.bannedUntil > now) {
         return {
           ...user,
           isSuspended: true,
-          suspensionEnds: user.suspendedUntil
+          suspensionEnds: user.bannedUntil
         };
       } else {
         await prisma.user.update({
           where: { id: user.id },
           data: {
-            isActive: true,
-            suspendedUntil: null
+            banned: false,
+            bannedUntil: null,
+            isActive: true
           }
         });
       }

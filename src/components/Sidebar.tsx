@@ -24,12 +24,12 @@ async function Sidebar() {
               href={`/profile/${user.username}`}
               className="flex flex-col items-center justify-center"
             >
-              <Avatar className="w-20 h-20 border-2 ">
+              <Avatar className="w-20 h-20 border-2 border-border">
                 <AvatarImage src={user.image || "/avatar.png"} />
               </Avatar>
 
               <div className="mt-4 space-y-1">
-                <h3 className="font-semibold">{user.name}</h3>
+                <h3 className="font-semibold text-card-foreground">{user.name}</h3>
                 <p className="text-sm text-muted-foreground">{user.username}</p>
               </div>
             </Link>
@@ -40,12 +40,12 @@ async function Sidebar() {
               <Separator className="my-4" />
               <div className="flex justify-between">
                 <div>
-                  <p className="font-medium">{user._count.following}</p>
+                  <p className="font-medium text-card-foreground">{user._count.following}</p>
                   <p className="text-xs text-muted-foreground">Following</p>
                 </div>
                 <Separator orientation="vertical" />
                 <div>
-                  <p className="font-medium">{user._count.followers}</p>
+                  <p className="font-medium text-card-foreground">{user._count.followers}</p>
                   <p className="text-xs text-muted-foreground">Followers</p>
                 </div>
               </div>
@@ -60,7 +60,7 @@ async function Sidebar() {
               <div className="flex items-center text-muted-foreground">
                 <LinkIcon className="w-4 h-4 mr-2 shrink-0" />
                 {user.website ? (
-                  <a href={`${user.website}`} className="hover:underline truncate" target="_blank">
+                  <a href={`${user.website}`} className="hover:underline truncate text-primary" target="_blank">
                     {user.website}
                   </a>
                 ) : (
@@ -81,7 +81,7 @@ const UnAuthenticatedSidebar = () => (
   <div className="sticky top-20">
     <Card>
       <CardHeader>
-        <CardTitle className="text-center text-xl font-semibold">Welcome Back!</CardTitle>
+        <CardTitle className="text-center text-xl font-semibold text-card-foreground">Welcome Back!</CardTitle>
       </CardHeader>
       <CardContent>
         <p className="text-center text-muted-foreground mb-4">
@@ -93,7 +93,7 @@ const UnAuthenticatedSidebar = () => (
           </Button>
         </SignInButton>
         <SignUpButton mode="modal">
-          <Button className="w-full mt-2" variant="default">
+          <Button className="w-full mt-2">
             Sign Up
           </Button>
         </SignUpButton>

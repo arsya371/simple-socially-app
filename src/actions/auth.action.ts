@@ -50,6 +50,24 @@ export async function logAdminAction(action: string, details?: string, performed
     const user = await currentUser();
     if (!user?.id) return;
     
+    // Get the database user ID
+    const dbUser = await prisma.user.findUnique({
+      where: { clerkId: user.id },
+      select: { id: true }
+    });
+    
+    if (!dbUser) return;
+    
+    // Create admin audit log entry
+    await prisma.adminAuditLog.create({
+      data: {
+        action,
+        details: details || null,
+        performedById: dbUser.id,
+        performedOn: performedOn || null
+      }
+    });
+    
     console.log("[Admin Action]", {
       action,
       details,

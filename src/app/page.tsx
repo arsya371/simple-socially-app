@@ -5,6 +5,8 @@ import PostCard from "@/components/PostCard";
 import WhoToFollow from "@/components/WhoToFollow";
 import { currentUser } from "@clerk/nextjs/server";
 
+export const dynamic = "force-dynamic";
+
 export default async function Home() {
   const user = await currentUser();
   const [posts, dbUserId] = await Promise.all([
@@ -23,7 +25,7 @@ export default async function Home() {
         {user ? <CreatePost /> : null}
 
         <div className="space-y-6">
-          {posts.map((post) => (
+          {posts.map((post: any) => (
             <PostCard 
               key={post.id} 
               post={post} 

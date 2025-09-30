@@ -23,6 +23,8 @@ export async function getProfileByUsername(username: string) {
         isActive: true,
         suspendedUntil: true,
         clerkId: true,
+        role: true,
+        verified: true,
         _count: {
           select: {
             followers: true,
@@ -49,9 +51,26 @@ export async function getProfileByUsername(username: string) {
   }
 }
 
+async function withRetry<T>(fn: () => Promise<T>, retries = 3): Promise<T> {
+  for (let i = 0; i < retries; i++) {
+    try {
+      return await fn();
+    } catch (error: any) {
+      if (i === retries - 1) throw error;
+      // If it's a connection error, wait before retrying
+      if (error.code === 'P1001' || error.code === 'P1017') {
+        await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, i)));
+        continue;
+      }
+      throw error;
+    }
+  }
+  throw new Error('Max retries reached');
+}
+
 export async function getUserPosts(userId: string) {
   try {
-    const posts = await prisma.post.findMany({
+    const posts = await withRetry(async () => prisma.post.findMany({
       where: {
         authorId: userId,
       },
@@ -94,7 +113,7 @@ export async function getUserPosts(userId: string) {
       orderBy: {
         createdAt: "desc",
       },
-    });
+    }));
 
     return posts;
   } catch (error) {
@@ -105,7 +124,7 @@ export async function getUserPosts(userId: string) {
 
 export async function getUserLikedPosts(userId: string) {
   try {
-    const likedPosts = await prisma.post.findMany({
+    const likedPosts = await withRetry(async () => prisma.post.findMany({
       where: {
         likes: {
           some: {
@@ -152,7 +171,7 @@ export async function getUserLikedPosts(userId: string) {
       orderBy: {
         createdAt: "desc",
       },
-    });
+    }));
 
     return likedPosts;
   } catch (error) {

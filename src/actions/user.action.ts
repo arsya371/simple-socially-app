@@ -11,7 +11,8 @@ export async function syncUser() {
 
     if (!userId || !user || !user.emailAddresses[0]) return;
 
-    const email = user.emailAddresses[0].emailAddress;
+    const emailRaw = user.emailAddresses[0].emailAddress;
+    const email = emailRaw.toLowerCase();
     const username = user.username ?? email.split("@")[0];
     
     // First check by clerk ID
@@ -32,9 +33,9 @@ export async function syncUser() {
       });
     }
 
-    // Then check by email
-    dbUser = await prisma.user.findUnique({
-      where: { email: email }
+    // Then check by email (case-insensitive)
+    dbUser = await prisma.user.findFirst({
+      where: { email: { equals: email, mode: 'insensitive' } },
     });
 
     if (dbUser) {
@@ -62,8 +63,25 @@ export async function syncUser() {
         },
       });
     } catch (error) {
-      // If username is taken, append random numbers
       const createError = error as any;
+      // If email already exists (race condition), update existing by email
+      if (createError?.code === 'P2002' && createError?.meta?.target?.includes('email')) {
+        const existing = await prisma.user.findFirst({
+          where: { email: { equals: email, mode: 'insensitive' } },
+        });
+        if (existing) {
+          return await prisma.user.update({
+            where: { id: existing.id },
+            data: {
+              clerkId: userId,
+              name: `${user.firstName || ""} ${user.lastName || ""}`.trim(),
+              username: username,
+              image: user.imageUrl,
+            },
+          });
+        }
+      }
+      // If username is taken, append random numbers and retry create
       if (createError?.code === 'P2002' && createError?.meta?.target?.includes('username')) {
         const randomSuffix = Math.floor(Math.random() * 1000);
         return await prisma.user.create({

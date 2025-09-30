@@ -1,6 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -10,6 +7,206 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model User {
+  id                   String             @id @default(cuid())
+  email                String             @unique
+  username             String             @unique
+  clerkId              String             @unique
+  name                 String?
+  bio                  String?
+  verified             Boolean            @default(false)
+  activated            Boolean            @default(true)
+  banned               Boolean            @default(false)
+  bannedUntil          DateTime?
+  image                String?
+  location             String?
+  website              String?
+  role                 Role               @default(USER)
+  isActive             Boolean            @default(true)
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+  suspendedUntil       DateTime?
+  adminActions         AdminAuditLog[]    @relation("adminActions")
+  comments             Comment[]
+  contentViolations    ContentViolation[]
+  following            Follows[]          @relation("follower")
+  followers            Follows[]          @relation("following")
+  likes                Like[]
+  notificationsCreated Notification[]     @relation("notificationCreator")
+  notifications        Notification[]     @relation("userNotifications")
+  posts                Post[]
+  reportsSubmitted     Report[]           @relation("reportedBy")
+  reportedReports      Report[]           @relation("reportedUsers")
+  reportsReviewed      Report[]           @relation("reviewedReports")
+  siteSettingsEdited   SiteSetting[]
+  appSettingsEdited    AppSetting[]       @relation("appSettingsEdited")
+  uploads              UploadedFile[]
+}
+
+model Post {
+  id            String         @id @default(cuid())
+  authorId      String
+  content       String?
+  image         String?
+  deleted       Boolean        @default(false)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  comments      Comment[]
+  likes         Like[]
+  notifications Notification[]
+  author        User           @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  reports       Report[]       @relation("reportedPosts")
+}
+
+model Comment {
+  id            String         @id @default(cuid())
+  content       String
+  authorId      String
+  postId        String
+  createdAt     DateTime       @default(now())
+  author        User           @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  post          Post           @relation(fields: [postId], references: [id], onDelete: Cascade)
+  notifications Notification[]
+  reports       Report[]       @relation("reportedComments")
+
+  @@index([authorId, postId])
+}
+
+model Like {
+  id        String   @id @default(cuid())
+  postId    String
+  userId    String
+  createdAt DateTime @default(now())
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, postId])
+  @@index([userId, postId])
+}
+
+model Follows {
+  followerId  String
+  followingId String
+  createdAt   DateTime @default(now())
+  follower    User     @relation("follower", fields: [followerId], references: [id], onDelete: Cascade)
+  following   User     @relation("following", fields: [followingId], references: [id], onDelete: Cascade)
+
+  @@id([followerId, followingId])
+  @@index([followerId, followingId])
+}
+
+model Report {
+  id             String       @id @default(cuid())
+  type           ReportType
+  details        String?
+  status         ReportStatus @default(PENDING)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  postId         String?
+  commentId      String?
+  reportedUserId String?
+  reportedBy     String
+  reviewedBy     String?
+  actionTaken    String?
+  adminNote      String?
+  reason         ReportReason
+  comment        Comment?     @relation("reportedComments", fields: [commentId], references: [id])
+  post           Post?        @relation("reportedPosts", fields: [postId], references: [id])
+  reporter       User         @relation("reportedBy", fields: [reportedBy], references: [id], onDelete: Cascade)
+  reportedUser   User?        @relation("reportedUsers", fields: [reportedUserId], references: [id])
+  reviewer       User?        @relation("reviewedReports", fields: [reviewedBy], references: [id])
+
+  @@index([type, status, reason])
+  @@index([postId])
+  @@index([commentId])
+  @@index([reportedUserId])
+  @@index([createdAt])
+}
+
+model SiteSetting {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String
+  category  String
+  updatedAt DateTime @updatedAt
+  updatedBy String
+  editor    User     @relation(fields: [updatedBy], references: [id], onDelete: Cascade)
+
+  @@index([category, key])
+}
+
+model AdminAuditLog {
+  id            String   @id @default(cuid())
+  action        String
+  details       String?
+  performedById String
+  performedOn   String?
+  createdAt     DateTime @default(now())
+  performedBy   User     @relation("adminActions", fields: [performedById], references: [id])
+
+  @@index([performedById])
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  creatorId String
+  type      NotificationType
+  read      Boolean          @default(false)
+  message   String?
+  postId    String?
+  commentId String?
+  createdAt DateTime         @default(now())
+  comment   Comment?         @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  creator   User             @relation("notificationCreator", fields: [creatorId], references: [id], onDelete: Cascade)
+  post      Post?            @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user      User             @relation("userNotifications", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+}
+
+model ContentViolation {
+  id          String        @id @default(cuid())
+  userId      String
+  type        ViolationType
+  contentType String
+  contentId   String
+  createdAt   DateTime      @default(now())
+  expiresAt   DateTime?
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+}
+
+model AppSetting {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  value       String   @db.Text
+  type        String
+  category    String
+  description String?
+  isPublic    Boolean  @default(false)
+  updatedBy   String
+  updatedAt   DateTime @default(now())
+  editor      User     @relation("appSettingsEdited", fields: [updatedBy], references: [id])
+}
+
+model UploadedFile {
+  id           String   @id @default(cuid())
+  filename     String
+  originalName String
+  mimeType     String
+  size         Int
+  path         String
+  url          String
+  category     String
+  uploadedBy   String
+  createdAt    DateTime @default(now())
+  uploader     User     @relation(fields: [uploadedBy], references: [id], onDelete: Cascade)
+
+  @@index([uploadedBy, createdAt])
+}
+
 enum Role {
   USER
   ADMIN
@@ -17,10 +214,22 @@ enum Role {
 }
 
 enum NotificationType {
-  LIKE     
-  COMMENT 
+  LIKE
+  COMMENT
   FOLLOW
-  REPORT   
+  REPORT
+  MODERATION_WARNING
+  ACCOUNT_SUSPENDED
+  ACCOUNT_BANNED
+  ACCOUNT_VERIFIED
+  ACCOUNT_ACTIVATED
+  ACCOUNT_STATUS_CHANGED
+}
+
+enum ViolationType {
+  PROHIBITED_CONTENT
+  SPAM
+  HARASSMENT
 }
 
 enum ReportStatus {
@@ -48,176 +257,4 @@ enum ReportReason {
   SELF_HARM
   MISINFORMATION
   OTHER
-}
-
-model User {
-  id String @id @default(cuid())
-  email String @unique
-  username String @unique
-  clerkId String @unique
-  name String?
-  bio String?
-  image String?
-  location String?
-  website String?
-  role Role @default(USER)
-  isActive Boolean @default(true)
-  suspendedUntil DateTime?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // Content
-  posts Post[]
-  comments Comment[]
-  likes Like[]
-  followers Follows[] @relation("following")
-  following Follows[] @relation("follower")
-  
-  // Reports
-  reportsSubmitted Report[] @relation("reportedBy")
-  reportsReviewed Report[] @relation("reviewedReports")
-  reportedReports Report[] @relation("reportedUsers")
-  
-  // Settings & Notifications
-  siteSettingsEdited SiteSetting[]
-  notifications Notification[] @relation("userNotifications")
-  notificationsCreated Notification[] @relation("notificationCreator")
-  adminActions AdminAuditLog[] @relation("adminActions")
-}
-
-model Post {
-  id String @id @default(cuid())
-  authorId String
-  content String?
-  image String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // Relations
-  author User @relation(fields: [authorId], references: [id], onDelete: Cascade)
-  comments Comment[]
-  likes Like[]
-  notifications Notification[]
-  reports Report[] @relation("reportedPosts")
-}
-
-model Comment {
-  id String @id @default(cuid())
-  content String
-  authorId String
-  postId String
-  createdAt DateTime @default(now())
-
-  // Relations
-  author User @relation(fields: [authorId], references: [id], onDelete: Cascade)
-  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
-  notifications Notification[]
-  reports Report[] @relation("reportedComments")
-
-  @@index([authorId, postId])
-}
-
-model Like {
-  id String @id @default(cuid())
-  postId String
-  userId String
-  createdAt DateTime @default(now())
-
-  // Relations
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
-
-  @@index([userId, postId])
-  @@unique([userId, postId])
-}
-
-model Follows {
-  followerId String
-  followingId String
-  createdAt DateTime @default(now())
-
-  follower User @relation("follower", fields: [followerId], references: [id], onDelete: Cascade)
-  following User @relation("following", fields: [followingId], references: [id], onDelete: Cascade)
-
-  @@id([followerId, followingId])
-  @@index([followerId, followingId])
-}
-
-model Report {
-  id String @id @default(cuid())
-  type ReportType
-  reason ReportReason
-  details String?
-  status ReportStatus @default(PENDING)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  adminNote String? // For admin comments on the report
-  actionTaken String? // To record what action was taken
-
-  // Content being reported
-  postId String?
-  post Post? @relation("reportedPosts", fields: [postId], references: [id], onDelete: SetNull)
-  commentId String?
-  comment Comment? @relation("reportedComments", fields: [commentId], references: [id], onDelete: SetNull)
-  reportedUserId String?
-  reportedUser User? @relation("reportedUsers", fields: [reportedUserId], references: [id], onDelete: SetNull)
-
-  // Report management
-  reportedBy String
-  reporter User @relation("reportedBy", fields: [reportedBy], references: [id], onDelete: Cascade)
-  reviewedBy String?
-  reviewer User? @relation("reviewedReports", fields: [reviewedBy], references: [id])
-
-  @@index([type, status, reason])
-  @@index([postId])
-  @@index([commentId])
-  @@index([reportedUserId])
-  @@index([createdAt])
-}
-
-model SiteSetting {
-  id String @id @default(cuid())
-  key String @unique
-  value String
-  category String
-  updatedAt DateTime @updatedAt
-  updatedBy String
-
-  // Relations
-  editor User @relation(fields: [updatedBy], references: [id], onDelete: Cascade)
-
-  @@index([category, key])
-}
-
-model AdminAuditLog {
-  id String @id @default(cuid())
-  action String
-  details String?
-  performedById String
-  performedOn String?
-  createdAt DateTime @default(now())
-
-  // Relations
-  performedBy User @relation("adminActions", fields: [performedById], references: [id])
-
-  @@index([performedById])
-}
-
-model Notification {
-  id String @id @default(cuid())
-  userId String
-  creatorId String
-  type NotificationType
-  read Boolean @default(false)
-  postId String?
-  commentId String?
-  createdAt DateTime @default(now())
-
-  // Relations
-  user User @relation("userNotifications", fields: [userId], references: [id], onDelete: Cascade)
-  creator User @relation("notificationCreator", fields: [creatorId], references: [id], onDelete: Cascade)
-  post Post? @relation(fields: [postId], references: [id], onDelete: Cascade)
-  comment Comment? @relation(fields: [commentId], references: [id], onDelete: Cascade)
-
-  @@index([userId, createdAt])
 }

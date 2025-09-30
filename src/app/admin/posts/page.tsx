@@ -33,7 +33,7 @@ export default async function AdminPostsPage() {
       </div>
 
       <div className="space-y-4">
-        {posts.map((post) => (
+        {posts.map((post: any) => (
           <Card key={post.id} className="p-4">
             <div className="flex flex-col space-y-4">
               <div className="flex items-start justify-between">

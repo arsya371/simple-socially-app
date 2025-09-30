@@ -23,7 +23,7 @@ async function getSettings(): Promise<Setting[]> {
     }
   });
 
-  return settings.map(setting => ({
+  return settings.map((setting: any) => ({
     id: setting.id,
     key: setting.key,
     value: setting.value,

@@ -16,11 +16,17 @@ export default async function AdminLayout({
   }
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-      <div className="hidden lg:block lg:col-span-3">
-        <AdminSidebar />
+    <div className="min-h-screen bg-background">
+      <div className="flex">
+        <div className="hidden md:flex w-72 shrink-0">
+          <AdminSidebar />
+        </div>
+        <div className="flex-1 p-8">
+          <div className="max-w-7xl mx-auto">
+            {children}
+          </div>
+        </div>
       </div>
-      <div className="lg:col-span-9">{children}</div>
     </div>
   );
 }

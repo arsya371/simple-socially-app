@@ -43,7 +43,7 @@ export default async function ReportsPage() {
       }
     });
 
-    const mappedReports = reports.map(report => ({
+    const mappedReports = reports.map((report: any) => ({
       ...report,
       status: report.status === "REVIEWED" ? "RESOLVED" : report.status
     })) as unknown as ReportWithRelations[];

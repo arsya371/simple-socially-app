@@ -7,7 +7,8 @@ import { Avatar, AvatarImage } from "./ui/avatar";
 import { Textarea } from "./ui/textarea";
 import { AlertCircle, ImageIcon, Loader2Icon, SendIcon } from "lucide-react";
 import { Button } from "./ui/button";
-import { createPost } from "@/actions/post.action";
+import { createModeratedPost } from "@/actions/moderation.action";
+import { checkUserSuspension } from "@/actions/post.action";
 import toast from "react-hot-toast";
 import ImageUpload from "./ImageUpload";
 import { useEffect } from "react";
@@ -26,13 +27,18 @@ function CreatePost() {
   useEffect(() => {
     const checkSuspension = async () => {
       if (!user) return;
-      const result = await createPost("", "");
-      if (result?.error) {
-        setError(result.error);
-        setIsSuspended(true);
-      } else {
-        setError(null);
-        setIsSuspended(false);
+      try {
+        const status = await checkUserSuspension(user.id);
+        if (status.isSuspended) {
+          setError(status.message || 'Your account is currently suspended');
+          setIsSuspended(true);
+        } else {
+          setError(null);
+          setIsSuspended(false);
+        }
+      } catch (error) {
+        console.error('Error checking suspension status:', error);
+        setError('Unable to check account status');
       }
     };
     checkSuspension();
@@ -43,7 +49,10 @@ function CreatePost() {
 
     setIsPosting(true);
     try {
-      const result = await createPost(content, imageUrl);
+      const formData = new FormData();
+      formData.append('content', content);
+      formData.append('image', imageUrl);
+      const result = await createModeratedPost(formData);
       if (result?.error) {
         setError(result.error);
         toast.error(result.error);
@@ -69,32 +78,32 @@ function CreatePost() {
   };
 
   return (
-    <Card className="mb-6">
-      <CardContent className="pt-6">
+    <Card className="mb-6 overflow-hidden border bg-card">
+      <CardContent className="p-4 sm:p-6">
         {error ? (
-          <Alert variant="destructive" className="mb-4">
+          <Alert variant="destructive" className="mb-6">
             <AlertCircle className="h-4 w-4" />
-            <AlertDescription>
+            <AlertDescription className="text-sm">
               {error}
             </AlertDescription>
           </Alert>
         ) : null}
-        <div className="space-y-4">
-          <div className="flex space-x-4">
-            <Avatar className="w-10 h-10">
-              <AvatarImage src={user?.imageUrl || "/avatar.png"} />
+        <div className="space-y-6">
+          <div className="flex gap-4">
+            <Avatar className="h-10 w-10 border bg-muted">
+              <AvatarImage src={user?.imageUrl || "/avatar.png"} alt={user?.username || "User avatar"} />
             </Avatar>
             <Textarea
               placeholder="What's on your mind?"
-              className="min-h-[100px] resize-none border-none focus-visible:ring-0 p-0 text-base"
+              className="min-h-[120px] resize-none text-base leading-relaxed bg-background focus-visible:ring-1"
               value={content}
               onChange={(e) => setContent(e.target.value)}
-              disabled={isPosting}
+              disabled={isSuspended || isPosting}
             />
           </div>
 
           {(showImageUpload || imageUrl) && (
-            <div className="border rounded-lg p-4">
+            <div className="border rounded-lg p-4 bg-muted/50">
               <ImageUpload
                 endpoint="postImage"
                 value={imageUrl}
@@ -107,34 +116,35 @@ function CreatePost() {
           )}
 
           <div className="flex items-center justify-between border-t pt-4">
-            <div className="flex space-x-2">
+            <div className="flex gap-2">
               <Button
                 type="button"
                 variant="ghost"
                 size="sm"
-                className="text-muted-foreground hover:text-primary"
+                className={`h-9 px-4 gap-2 ${imageUrl ? 'text-primary hover:text-primary/90' : 'text-muted-foreground hover:text-foreground'}`}
                 onClick={() => setShowImageUpload(!showImageUpload)}
                 disabled={isPosting || !!error}
               >
-                <ImageIcon className="size-4 mr-2" />
-                Photo
+                <ImageIcon className="h-4 w-4" />
+                <span>Photo</span>
               </Button>
             </div>
             <Button
-              className="flex items-center"
+              size="sm"
+              className="h-9 px-4 gap-2"
               onClick={handleSubmit}
               disabled={(!content.trim() && !imageUrl) || isPosting || !!error}
               title={error ? error : undefined}
             >
               {isPosting ? (
                 <>
-                  <Loader2Icon className="size-4 mr-2 animate-spin" />
-                  Posting...
+                  <Loader2Icon className="h-4 w-4 animate-spin" />
+                  <span>Posting...</span>
                 </>
               ) : (
                 <>
-                  <SendIcon className="size-4 mr-2" />
-                  Post
+                  <SendIcon className="h-4 w-4" />
+                  <span>Post</span>
                 </>
               )}
             </Button>

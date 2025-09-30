@@ -5,6 +5,8 @@
 /.pnp
 .pnp.js
 .yarn/install-state.gz
+.next
+.github
 
 # testing
 /coverage
@@ -29,10 +31,6 @@ yarn-error.log*
 .env*.local
 .env
 
-#prisma
-/prisma/dev.dbs
-/prisma/migrations
-
 # vercel
 .vercel
 
@@ -41,3 +39,7 @@ yarn-error.log*
 next-env.d.ts
 
 /src/generated/prisma
+/prisma/dev.dbs
+/prisma/migrations
+.github/copilot-instructions.md
+public/uploads/f17059ed-955d-4303-90ab-98e13a445aef.png

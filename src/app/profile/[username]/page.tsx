@@ -1,108 +1,67 @@
+import { Suspense } from "react";
 import { notFound } from "next/navigation";
-import { getProfileByUsername, getUserPosts } from "@/actions/profile.action";
-import { Card } from "@/components/ui/card";
-import ProfilePageClient from "./ProfilePageClient";
-import { currentUser } from "@clerk/nextjs/server";
-import { getUserByClerkId } from "@/actions/user.action";
 import prisma from "@/lib/prisma";
-import { Metadata } from "next";
+import ProfilePageClient from "./ProfilePageClient";
 
-type Props = {
-  params: Promise<{
-    username: string;
-  }>;
-  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
-};
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
-export async function generateMetadata({ params }: Props): Promise<Metadata> {
-  const { username } = await params;
-  const profile = await getProfileByUsername(username);
-  if (!profile) {
+async function getProfileData(username: string) {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { username },
+      select: {
+        id: true,
+        name: true,
+        username: true,
+        bio: true,
+        image: true,
+        location: true,
+        website: true,
+        role: true,
+        verified: true,
+        isActive: true,
+        banned: true,
+        bannedUntil: true,
+        createdAt: true, // Add this field
+        suspendedUntil: true,
+        _count: {
+          select: {
+            followers: true,
+            following: true,
+            posts: true,
+          },
+        },
+      },
+    });
+
+    if (!user) return null;
+
     return {
-      title: "User Not Found",
-      description: "This user profile could not be found."
+      ...user,
+      createdAt: user.createdAt.toISOString(), // Convert Date to string
+      bannedUntil: user.bannedUntil?.toISOString() || null, // Convert Date to string
+      suspendedUntil: user.suspendedUntil?.toISOString() || null, // Convert Date to string
     };
+  } catch (error) {
+    console.error("Error fetching profile:", error);
+    return null;
   }
-  return {
-    title: `${profile.name || profile.username} | Profile`,
-    description: profile.bio || `Check out ${profile.username}'s profile`
-  };
 }
 
-export default async function ProfilePage({ params }: Props) {
-  const { username } = await params;
-  const user = await currentUser();
-  const profile = await getProfileByUsername(username);
-  if (!profile) {
+export default async function ProfilePage(props: {
+  params: Promise<{ username: string }>;
+}) {
+  const params = await props.params;
+  const user = await getProfileData(params.username);
+
+  if (!user) {
     notFound();
   }
 
-  const [posts, likedPosts] = await Promise.all([
-    getUserPosts(profile.id),
-    prisma.post.findMany({
-      where: {
-        likes: {
-          some: {
-            userId: profile.id
-          }
-        }
-      },
-      include: {
-        author: true,
-        likes: true,
-        comments: {
-          include: {
-            author: true
-          }
-        },
-        _count: {
-          select: {
-            likes: true,
-            comments: true
-          }
-        }
-      },
-      orderBy: {
-        createdAt: "desc"
-      }
-    })
-  ]);
-
-  let isFollowing = false;
-  
-  if (user?.id) {
-    const currentUserDb = await getUserByClerkId(user.id);
-    if (currentUserDb) {
-      const followExists = await prisma.follows.findUnique({
-        where: {
-          followerId_followingId: {
-            followerId: currentUserDb.id,
-            followingId: profile.id
-          }
-        }
-      });
-      isFollowing = !!followExists;
-    }
-  }
-
-  const suspendedUser = await prisma.user.findUnique({
-    where: { id: profile.id },
-    select: { suspendedUntil: true }
-  });
-
-  const suspendedUntil = suspendedUser?.suspendedUntil || null;
-  const isActive = !suspendedUntil || suspendedUntil < new Date();
-
   return (
-    <div className="container max-w-4xl py-6">
-      <Card className="relative">
-        <ProfilePageClient
-          user={{ ...profile, isActive, suspendedUntil }}
-          posts={posts}
-          likedPosts={likedPosts}
-          isFollowing={isFollowing}
-        />
-      </Card>
-    </div>
+    <Suspense fallback={<div>Loading...</div>}>
+      <ProfilePageClient user={user} />
+    </Suspense>
   );
 }

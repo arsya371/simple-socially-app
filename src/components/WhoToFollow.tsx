@@ -6,7 +6,7 @@ import { Avatar, AvatarImage } from "./ui/avatar";
 import FollowButton from "./FollowButton";
 
 async function WhoToFollow() {
-  const users = await getRandomUsers();
+  const users = (await getRandomUsers()).filter(user => user.username !== 'system');
 
   if (users.length === 0) return null;
 
