@@ -1,0 +1,363 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  USER
+  MODERATOR
+  DEVELOPER
+  ADMIN
+}
+
+enum AccountStatus {
+  ACTIVE
+  SUSPENDED
+  BANNED
+}
+
+model Setting {
+  id String @id @default(cuid())
+  key String @unique
+  value String
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+
+  @@index([key])
+}
+
+enum ReportStatus {
+  PENDING
+  RESOLVED
+  DISMISSED
+}
+
+enum ReportType {
+  SPAM
+  HARASSMENT
+  INAPPROPRIATE
+  VIOLENCE
+  OTHER
+}
+
+enum LogLevel {
+  INFO
+  WARN
+  ERROR
+  DEBUG
+}
+
+model SystemLog {
+  id         String   @id @default(cuid())
+  method     String
+  path       String
+  statusCode Int
+  duration   Int
+  userAgent  String
+  userId     String?  // Make this optional
+  user       User?    @relation(fields: [userId], references: [id])
+  ipAddress  String
+  level      LogLevel
+  message    String
+  metadata   Json?
+  timestamp DateTime @default(now())
+
+  @@index([userId])
+  @@index([path, timestamp])
+  @@index([timestamp])
+  @@index([level, timestamp])
+  @@index([message])
+  @@index([level, path, timestamp])
+  @@index([path, message])
+  @@index([statusCode, timestamp])
+  @@index([duration, timestamp])
+}
+
+// model SystemLog {
+//   id String @id @default(cuid())
+//   method String
+//   path String
+//   statusCode Int
+//   duration Int
+//   userAgent String
+//   ipAddress String
+//   level LogLevel
+//   message String?
+//   metadata Json?
+//   timestamp DateTime @default(now())
+//   userId String?
+//   user User? @relation(fields: [userId], references: [id])
+
+//   @@index([timestamp])
+//   @@index([level])
+//   @@index([userId])
+// }
+
+// Message and Conversation models are defined at the bottom of the file
+
+enum ReportEntityType {
+  POST
+  USER
+}
+
+model User {
+  id String @id @default(cuid())
+  email String @unique
+  username String @unique
+  clerkId String @unique
+  name String?
+  bio String?
+  image String?
+  location String?
+  website String?
+  isVerified Boolean @default(false)
+  role Role @default(USER)
+  status AccountStatus @default(ACTIVE)
+  statusReason String?
+  statusUpdatedAt DateTime?
+  statusUpdatedBy String?
+  lastSeen DateTime?
+  isOnline Boolean @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  bannedUntil DateTime?
+  suspendedUntil DateTime?
+  moderationHistory Json?
+
+  // Notifications
+  receivedNotifications Notification[] @relation("UserNotifications")
+  createdNotifications  Notification[] @relation("NotificationCreator")
+  moderatedNotifications Notification[] @relation("ModeratorNotifications")
+
+  @@index([status])
+  @@index([bannedUntil])
+  @@index([suspendedUntil])
+
+  @@index([clerkId, role])
+  @@index([role, status])
+  @@index([createdAt])
+  @@index([isOnline])
+  @@index([lastSeen])
+ 
+  posts Post[]
+  comments Comment[]
+  likes Like[]
+  systemLogs SystemLog[]
+  tasks Task[]
+
+  // Message relations
+  sentMessages Message[] @relation("SentMessages")
+  receivedMessages Message[] @relation("ReceivedMessages")
+  conversations Conversation[] @relation("UserConversations")
+
+  followers Follows[] @relation("following")
+  following Follows[] @relation("follower")
+
+  reportsCreated Report[] @relation("reporterReports")
+  reportsResolved Report[] @relation("resolverReports")
+  reportsReceived Report[] @relation("targetReports")
+  systemErrors SystemError[]
+}
+
+
+model Post {
+  id        String    @id @default(cuid())
+  authorId String
+  content String?
+  image String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  // Relations
+  author User @relation(fields: [authorId],references: [id], onDelete: Cascade) // cascade delete means delete all posts if author is deleted
+  comments Comment[]
+  likes Like[]
+  notifications Notification[]
+  reports Report[] // Reports made against this post
+}
+
+model SystemMetric {
+  id String @id
+  totalRequests Int @default(0)
+  averageResponseTime Float @default(0)
+  errorRate Float @default(0)
+  uptime Int @default(0) // stored in seconds
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([createdAt])
+}
+
+model SystemError {
+  id String @id @default(cuid())
+  content String
+  reporterId String
+  reporter User @relation(fields: [reporterId], references: [id])
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+}
+
+
+model Comment{
+  id String @id @default(cuid())
+  content String
+  authorId String
+  postId String
+  createdAt DateTime @default(now())
+
+  // Relations
+  author User @relation(fields: [authorId],references: [id],onDelete: Cascade)
+  post Post @relation(fields: [postId],references: [id], onDelete: Cascade)
+  notifications Notification[]
+
+  @@index([authorId,postId]) // composite index for faster queries
+}
+
+model Like {
+  id        String   @id @default(cuid())
+  postId    String                 
+  userId    String                 
+  createdAt DateTime @default(now())
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@index([userId,postId]) // composite index for faster queries
+  @@unique([userId,postId]) // this prevents same user liking post twice
+}
+
+model Follows{
+  followerId String
+  followingId String
+  createdAt DateTime @default(now())
+
+  // Relations
+  follower    User     @relation("follower", fields: [followerId], references: [id], onDelete: Cascade)
+  following   User     @relation("following", fields: [followingId], references: [id], onDelete: Cascade)
+
+  @@index([followerId,followingId]) // composite index for faster queries
+  @@id([followerId, followingId]) // composite primary key prevents duplicate follows
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  type      NotificationType
+  message   String?
+  metadata  Json?
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+  
+  // User who receives the notification
+  userId    String
+  user      User     @relation("UserNotifications", fields: [userId], references: [id])
+  
+  // User who created the notification
+  creatorId String?
+  creator   User?    @relation("NotificationCreator", fields: [creatorId], references: [id])
+  
+  // Moderator relation
+  moderatorId String?
+  moderator   User?   @relation("ModeratorNotifications", fields: [moderatorId], references: [id])
+  
+  // Optional fields for different notification types
+  postId     String?
+  post       Post?    @relation(fields: [postId], references: [id])
+  commentId  String?
+  comment    Comment? @relation(fields: [commentId], references: [id])
+
+  @@index([userId, read])
+  @@index([createdAt])
+}
+
+enum NotificationType {
+  LIKE
+  COMMENT
+  FOLLOW
+  MESSAGE
+  REPORT
+  BANNED
+  UNBANNED
+  SUSPENDED
+  UNSUSPENDED
+  ACCOUNT_WARNING
+}
+
+model Task {
+  id        String   @id @default(cuid())
+  title     String
+  completed Boolean  @default(false)
+  userId    String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([createdAt])
+}
+
+model Report {
+  id        String   @id @default(cuid())
+  type      ReportType
+  status    ReportStatus @default(PENDING)
+  content   String
+  reporterId String
+  postId    String? // Make postId optional
+  targetUserId String? // Add targetUserId
+  createdAt DateTime @default(now())
+  resolvedAt DateTime?
+  resolvedBy String?
+  resolution String?
+
+  // Relations
+  reporter  User     @relation("reporterReports", fields: [reporterId], references: [id], onDelete: Cascade)
+  post      Post?    @relation(fields: [postId], references: [id], onDelete: Cascade) // Make post relation optional
+  targetUser User?   @relation("targetReports", fields: [targetUserId], references: [id], onDelete: SetNull) // Add targetUser relation
+  resolver  User?    @relation("resolverReports", fields: [resolvedBy], references: [id])
+
+  @@index([status, createdAt])
+    @@index([reporterId])
+  @@index([postId])
+  @@index([targetUserId]) // Add index for targetUserId
+}
+
+model Message {
+  id            String       @id @default(cuid())
+  content       String
+  sender        User         @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
+  senderId      String
+  receiver      User         @relation("ReceivedMessages", fields: [receiverId], references: [id], onDelete: Cascade)
+  receiverId    String
+  conversation  Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  conversationId String
+  read          Boolean      @default(false)
+  isDeleted     Boolean      @default(false)
+  deletedAt     DateTime?
+  deletedBy     String?
+  deleteForEveryone Boolean  @default(false)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  @@index([senderId, receiverId, createdAt])
+  @@index([receiverId, createdAt])
+  @@index([senderId, createdAt])
+  @@index([conversationId, createdAt])
+}
+
+model Conversation {
+  id            String    @id @default(cuid())
+  participants  User[]    @relation("UserConversations")
+  messages      Message[]
+  lastMessageAt DateTime  @default(now())
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([lastMessageAt])
+}

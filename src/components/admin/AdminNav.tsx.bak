@@ -1,0 +1,46 @@
+"use client";
+
+import { cn } from "@/lib/utils";
+import { UsersIcon, SettingsIcon, LayoutDashboardIcon } from "lucide-react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+
+const navItems = [
+  {
+    title: "Dashboard",
+    href: "/admin",
+    icon: LayoutDashboardIcon,
+  },
+  {
+    title: "Users",
+    href: "/admin/users",
+    icon: UsersIcon,
+  },
+  {
+    title: "Settings",
+    href: "/admin/settings",
+    icon: SettingsIcon,
+  },
+];
+
+export function AdminNav() {
+  const pathname = usePathname();
+
+  return (
+    <nav className="flex flex-col gap-2">
+      {navItems.map((item) => (
+        <Link
+          key={item.href}
+          href={item.href}
+          className={cn(
+            "flex items-center gap-2 px-4 py-2 rounded-lg hover:bg-accent transition-colors",
+            pathname === item.href && "bg-accent font-medium"
+          )}
+        >
+          <item.icon className="w-5 h-5" />
+          {item.title}
+        </Link>
+      ))}
+    </nav>
+  );
+}

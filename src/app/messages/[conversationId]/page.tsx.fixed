@@ -1,0 +1,183 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import { useParams } from 'next/navigation';
+import { useAuth } from '@clerk/nextjs';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { SendHorizontalIcon } from 'lucide-react';
+import { cn } from '@/lib/utils';
+
+// 1. Update interface Message
+interface Message {
+  id: string;
+  content: string;
+  senderId: string;
+  receiverId: string;
+  createdAt: string;
+  read: boolean;
+  sender: {
+    id: string;
+    username: string;
+    image?: string;
+  };
+}
+
+interface User {
+  id: string;
+  username: string;
+  image?: string;
+}
+
+export default function ConversationPage() {
+  const { conversationId } = useParams();
+  const { userId, isLoaded } = useAuth();
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [newMessage, setNewMessage] = useState('');
+  const [otherUser, setOtherUser] = useState<User | null>(null);
+
+  useEffect(() => {
+    if (conversationId && userId) {
+      fetchMessages();
+    }
+  }, [conversationId, userId]);
+
+  const fetchMessages = async () => {
+    try {
+      const response = await fetch(`/api/messages/${conversationId}`);
+      const data = await response.json();
+      setMessages(
+        data.messages.map((message: any) => ({
+          ...message,
+          sender: message.sender, // Pastikan sender selalu ada
+          senderId: message.sender.id, // Gunakan ID dari sender
+        }))
+      );
+      setOtherUser(data.otherUser);
+    } catch (error) {
+      console.error('Failed to fetch messages:', error);
+    }
+  };
+
+  const sendMessage = async () => {
+    if (!newMessage.trim() || !otherUser || !conversationId) return;
+
+    try {
+      const response = await fetch(`/api/messages/${conversationId}/send`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          content: newMessage,
+          receiverId: otherUser.id,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to send message');
+      }
+
+      const data = await response.json();
+      setMessages((prev) => [...prev, data]);
+      setNewMessage('');
+    } catch (error) {
+      console.error('Failed to send message:', error);
+    }
+  };
+
+  if (!isLoaded || !userId) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <p className="text-muted-foreground">Loading...</p>
+      </div>
+    );
+  }
+
+  // 2. Perbaiki kondisi pengecekan pengirim
+  const isCurrentUser = (message: Message) => message.sender.id === userId;
+
+  return (
+    <div className="flex flex-col h-full bg-background">
+      {/* Header */}
+      {otherUser && (
+        <div className="flex items-center gap-3 p-4 border-b">
+          <Avatar className="h-10 w-10">
+            <AvatarImage src={otherUser.image} />
+            <AvatarFallback>{otherUser.username[0].toUpperCase()}</AvatarFallback>
+          </Avatar>
+          <div className="flex-1">
+            <h3 className="font-medium">{otherUser.username}</h3>
+            <p className="text-sm text-muted-foreground">Active now</p>
+          </div>
+        </div>
+      )}
+
+      {/* Messages */}
+      <ScrollArea className="flex-1 px-4">
+        <div className="space-y-4 py-4">
+          {messages.map((message) => (
+            // 3. Update render pesan
+            <div
+              key={message.id}
+              className={cn(
+                'flex items-end gap-2 group',
+                isCurrentUser(message) ? 'flex-row-reverse' : 'flex-row'
+              )}
+            >
+              <Avatar className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity">
+                <AvatarImage
+                  src={isCurrentUser(message) ? undefined : otherUser?.image}
+                />
+                <AvatarFallback>
+                  {isCurrentUser(message) ? 'Me' : otherUser?.username?.[0]}
+                </AvatarFallback>
+              </Avatar>
+
+              <div
+                className={cn(
+                  'px-4 py-2 rounded-2xl max-w-[70%] break-words',
+                  isCurrentUser(message)
+                    ? 'bg-primary text-primary-foreground rounded-br-sm'
+                    : 'bg-muted rounded-bl-sm'
+                )}
+              >
+                <p className="text-sm">{message.content}</p>
+              </div>
+
+              <span className="text-xs text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity">
+                {new Date(message.createdAt).toLocaleTimeString([], {
+                  hour: '2-digit',
+                  minute: '2-digit',
+                })}
+              </span>
+            </div>
+          ))}
+        </div>
+      </ScrollArea>
+
+      {/* Input */}
+      <div className="p-4 border-t">
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            sendMessage();
+          }}
+          className="flex items-center gap-2"
+        >
+          <Input
+            placeholder="Write a message..."
+            value={newMessage}
+            onChange={(e) => setNewMessage(e.target.value)}
+            className="flex-1"
+          />
+          <Button type="submit" size="icon" className="rounded-full">
+            <SendHorizontalIcon className="h-5 w-5" />
+          </Button>
+        </form>
+      </div>
+    </div>
+  );
+}
